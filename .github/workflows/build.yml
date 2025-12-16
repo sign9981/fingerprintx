@@ -40,7 +40,7 @@ jobs:
         with:
           go-version: '1.21'
 
-      - name: Build binary and create .tar.gz
+      - name: Build binary
         run: |
           set -euxo pipefail
           BINARY_NAME="fingerprintx"
@@ -54,9 +54,12 @@ jobs:
           GOARCH=${{ matrix.goarch }} \
           go build -trimpath -ldflags="-s -w" -o "${BINARY_NAME}" ./cmd/fingerprintx
 
-          # 创建压缩包：fingerprintx-<os>-<arch>.tar.gz
+          ls -lh "${BINARY_NAME}"
+
+      - name: Create .tar.gz archive
+        run: |
           ARCHIVE_NAME="fingerprintx-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz"
-          tar -czf "${ARCHIVE_NAME}" "${BINARY_NAME}"
+          tar -czf "${ARCHIVE_NAME}" fingerprintx*
           echo "✅ Created: ${ARCHIVE_NAME}"
           ls -lh "${ARCHIVE_NAME}"
 
@@ -78,7 +81,7 @@ jobs:
         with:
           path: ./artifacts
 
-      - name: Flatten and generate checksums
+      - name: Flatten artifacts and generate checksums
         run: |
           mkdir -p release-binaries
           find ./artifacts -type f -name "*.tar.gz" -exec mv {} ./release-binaries/ \;
