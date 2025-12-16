@@ -1,4 +1,4 @@
-name: Build and Release fingerprintx
+name: Build and Release fingerprintx (tar.gz only)
 
 on:
   push:
@@ -10,7 +10,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write  # 用于创建 GitHub Release
+  contents: write
 
 jobs:
   build:
@@ -40,37 +40,32 @@ jobs:
         with:
           go-version: '1.21'
 
-      - name: Show environment info
-        run: |
-          echo "=== Environment ==="
-          go version
-          pwd
-          ls -la ./cmd/fingerprintx/
-
-      - name: Build binary
+      - name: Build binary and create .tar.gz
         run: |
           set -euxo pipefail
-          BINARY_NAME="fingerprintx-${{ matrix.goos }}-${{ matrix.goarch }}"
+          BINARY_NAME="fingerprintx"
           if [ "${{ matrix.goos }}" = "windows" ]; then
-            BINARY_NAME="${BINARY_NAME}.exe"
+            BINARY_NAME="fingerprintx.exe"
           fi
 
-          echo "Building ${BINARY_NAME} from ./cmd/fingerprintx"
+          echo "Building ${BINARY_NAME} for ${{ matrix.goos }}/${{ matrix.goarch }}"
           CGO_ENABLED=0 \
           GOOS=${{ matrix.goos }} \
           GOARCH=${{ matrix.goarch }} \
-          go build -trimpath -ldflags="-s -w -X main.version=${GITHUB_REF#refs/tags/}" -o "${BINARY_NAME}" ./cmd/fingerprintx
+          go build -trimpath -ldflags="-s -w" -o "${BINARY_NAME}" ./cmd/fingerprintx
 
-          echo "✅ Build succeeded!"
-          ls -lh "${BINARY_NAME}"
+          # 创建压缩包：fingerprintx-<os>-<arch>.tar.gz
+          ARCHIVE_NAME="fingerprintx-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz"
+          tar -czf "${ARCHIVE_NAME}" "${BINARY_NAME}"
+          echo "✅ Created: ${ARCHIVE_NAME}"
+          ls -lh "${ARCHIVE_NAME}"
 
-      - name: Upload artifact
-        if: always()
+      - name: Upload .tar.gz artifact
         uses: actions/upload-artifact@v4
         with:
           name: fingerprintx-${{ matrix.goos }}-${{ matrix.goarch }}
           path: |
-            fingerprintx-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.goos == 'windows' && '.exe' || '' }}
+            fingerprintx-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz
 
   release:
     name: Create GitHub Release (if tagged)
@@ -83,23 +78,23 @@ jobs:
         with:
           path: ./artifacts
 
-      - name: Flatten artifacts and generate checksums
+      - name: Flatten and generate checksums
         run: |
           mkdir -p release-binaries
-          find ./artifacts -type f -exec mv {} ./release-binaries/ \;
+          find ./artifacts -type f -name "*.tar.gz" -exec mv {} ./release-binaries/ \;
           cd release-binaries
-          sha256sum * > SHA256SUMS
+          sha256sum *.tar.gz > SHA256SUMS
           cat SHA256SUMS
 
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            release-binaries/fingerprintx-linux-amd64
-            release-binaries/fingerprintx-linux-arm64
-            release-binaries/fingerprintx-windows-amd64.exe
-            release-binaries/fingerprintx-darwin-amd64
-            release-binaries/fingerprintx-darwin-arm64
+            release-binaries/fingerprintx-linux-amd64.tar.gz
+            release-binaries/fingerprintx-linux-arm64.tar.gz
+            release-binaries/fingerprintx-windows-amd64.tar.gz
+            release-binaries/fingerprintx-darwin-amd64.tar.gz
+            release-binaries/fingerprintx-darwin-arm64.tar.gz
             release-binaries/SHA256SUMS
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
