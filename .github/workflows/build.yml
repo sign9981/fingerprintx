@@ -5,8 +5,6 @@ on:
     branches: [ main, master ]
     tags:
       - 'v*.*.*'
-  pull_request:
-    branches: [ main, master ]
   workflow_dispatch:
 
 permissions:
@@ -21,14 +19,10 @@ jobs:
         include:
           - goos: linux
             goarch: amd64
-          - goos: linux
-            goarch: arm64
           - goos: windows
             goarch: amd64
           - goos: darwin
             goarch: amd64
-          - goos: darwin
-            goarch: arm64
 
     steps:
       - name: Checkout code
@@ -37,16 +31,18 @@ jobs:
       - name: Set up Go 1.21
         uses: actions/setup-go@v5
         with:
-          go-version: '1.21'  # 显式指定，与 go.mod 一致
+          go-version: '1.21'
 
       - name: Build binary
         run: |
+          set -euxo pipefail
           BINARY_NAME="fingerprintx-${{ matrix.goos }}-${{ matrix.goarch }}"
           if [ "${{ matrix.goos }}" = "windows" ]; then
             BINARY_NAME="${BINARY_NAME}.exe"
           fi
-          CGO_ENABLED=0 GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }} go build -trimpath -ldflags="-s -w -X main.version=${GITHUB_REF#refs/tags/}" -o "${BINARY_NAME}" .
+          CGO_ENABLED=0 GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }} go build -trimpath -ldflags="-s -w" -o "${BINARY_NAME}" .
           echo "✅ Built ${BINARY_NAME}"
+          ls -l "${BINARY_NAME}"
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -66,27 +62,12 @@ jobs:
         with:
           path: ./artifacts
 
-      - name: Flatten and list binaries
-        run: |
-          mkdir -p release-binaries
-          find ./artifacts -type f -exec mv {} ./release-binaries/ \;
-          ls -lh release-binaries/
-
-      - name: Generate SHA256 checksums
-        run: |
-          cd release-binaries
-          sha256sum * > SHA256SUMS
-          cat SHA256SUMS
-
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            release-binaries/fingerprintx-linux-amd64
-            release-binaries/fingerprintx-linux-arm64
-            release-binaries/fingerprintx-windows-amd64.exe
-            release-binaries/fingerprintx-darwin-amd64
-            release-binaries/fingerprintx-darwin-arm64
-            release-binaries/SHA256SUMS
+            artifacts/fingerprintx-linux-amd64
+            artifacts/fingerprintx-windows-amd64.exe
+            artifacts/fingerprintx-darwin-amd64
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
